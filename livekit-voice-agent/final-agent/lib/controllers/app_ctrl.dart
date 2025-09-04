@@ -140,9 +140,16 @@ class AppCtrl extends ChangeNotifier {
 
     // Update states
     connectionState = ConnectionState.disconnected;
-    appScreenState = AppScreenState.welcome;
+    // appScreenState = AppScreenState.welcome;
     agentScreenState = AgentScreenState.visualizer;
 
     notifyListeners();
   }
+
+  void navigateToAgent() {
+  // Just navigate without connecting to voice
+  appScreenState = AppScreenState.agent;
+  notifyListeners();
+}
+
 }

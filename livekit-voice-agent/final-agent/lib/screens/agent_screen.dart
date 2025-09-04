@@ -114,6 +114,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
   void _startNewChat() {
     setState(() {
       _currentView = AppView.chat;
+    context.read<app_ctrl.AppCtrl>().connect();
       _currentChatSession = null; // Start fresh chat
     });
     // Connect to voice mode
@@ -453,17 +454,17 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
             const SizedBox(height: 16),
             
             // Alternative Text Mode Button
-            TextButton(
-              onPressed: _startNewChat,
-              child: const Text(
-                'Or start with text chat',
-                style: TextStyle(
-                  color: Color(0xFF153f1e),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
+            // TextButton(
+            //   onPressed: _startNewChat,
+            //   child: const Text(
+            //     'Or start with text chat',
+            //     style: TextStyle(
+            //       color: Color(0xFF153f1e),
+            //       fontSize: 14,
+            //       fontWeight: FontWeight.w500,
+            //     ),
+            //   ),
+            // ),
             
             const SizedBox(height: 48),
             
@@ -977,3 +978,5 @@ class _FeatureItem extends StatelessWidget {
     );
   }
 }
+
+

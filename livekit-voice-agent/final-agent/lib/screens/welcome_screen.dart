@@ -316,7 +316,7 @@ class WelcomeScreen extends StatelessWidget {
                                           color: Colors.transparent,
                                           child: InkWell(
                                             borderRadius: BorderRadius.circular(12),
-                                            onTap: isProgressing ? null : () => ctx.read<ctrl.AppCtrl>().connect(),
+                                            onTap: isProgressing ? null : () => ctx.read<ctrl.AppCtrl>().navigateToAgent(),
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 borderRadius: BorderRadius.circular(12),
