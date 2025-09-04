@@ -149,7 +149,7 @@ class WelcomeScreen extends StatelessWidget {
                                       gradient: LinearGradient(
                                         begin: Alignment.topCenter,
                                         end: Alignment.bottomCenter,
-                                        stops: [0.0, 0.15, 0.85, 1.0],
+                                        stops: const [0.0, 0.15, 0.85, 1.0],
                                         colors: [
                                           const Color(0xFF1e5e29).withOpacity(0.95),
                                           const Color(0xFF153f1e),
@@ -192,7 +192,7 @@ class WelcomeScreen extends StatelessWidget {
                                         gradient: LinearGradient(
                                           begin: Alignment.topCenter,
                                           end: Alignment.bottomCenter,
-                                          stops: [0.0, 0.3, 1.0],
+                                          stops: const [0.0, 0.3, 1.0],
                                           colors: [
                                             Colors.white.withOpacity(0.08),
                                             Colors.white.withOpacity(0.02),
@@ -400,7 +400,7 @@ class WelcomeScreen extends StatelessWidget {
                             ),
                           ),
                           child: Text(
-                            '© 2025 Binfin8',
+                            '© 2025 Binfin8 All Rights Reserved',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
                               fontSize: 11,

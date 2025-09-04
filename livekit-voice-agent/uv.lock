@@ -157,6 +157,37 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-cognitiveservices-speech"
+version = "1.45.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/ff/ea861803fb4ac6e407d46f36f30c8f63c9214c6a72d66b62348a296a49a6/azure_cognitiveservices_speech-1.45.0-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:09466a0f7c63652d1efde24acb9b5d8a500e880c2c22505984d53fec3ec705e4", size = 7489416, upload-time = "2025-07-10T22:24:14.807Z" },
+    { url = "https://files.pythonhosted.org/packages/19/d3/648d2d4e5033d6e84651248fa6ec06991a0e04e0e5e1f414b04c2a5e1eb9/azure_cognitiveservices_speech-1.45.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:940cf5f815231536b19911bc361ff363a1494ba696257d076726f4288547ff14", size = 7342303, upload-time = "2025-07-10T22:24:17.121Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/36/623ffc42992f5fd886f189d5778ee4544711a92d9b5e6f64e0a61e6514dd/azure_cognitiveservices_speech-1.45.0-py3-none-manylinux1_x86_64.whl", hash = "sha256:317fc21f0fff3bbb8eb35d8db48669cd983a75c40740c60babe2c6476087e638", size = 41928888, upload-time = "2025-07-10T22:24:19.403Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/7c/b0d430b106b05087be1df6d93f461d225ecc549e287e09a7005d4dca43ac/azure_cognitiveservices_speech-1.45.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:1f08f549d92ccb548df5b72049f973075ad2f6c3377a23d180921967af6496d5", size = 41709489, upload-time = "2025-07-10T22:24:22.642Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/74/09e1cba9c8d3ec6820ccd5a1a0fe5e9b760f3a6e8ed32c3fe007cee92461/azure_cognitiveservices_speech-1.45.0-py3-none-win32.whl", hash = "sha256:9129845b18f24f446023762db73a03c5b53e47999a08c5744b108d07e2ecbe49", size = 2168530, upload-time = "2025-07-10T22:24:25.244Z" },
+    { url = "https://files.pythonhosted.org/packages/1c/10/ea33ba7079b018370c2604a857251a92da61042355bbb65b045e36860faf/azure_cognitiveservices_speech-1.45.0-py3-none-win_amd64.whl", hash = "sha256:eca91493183134fa6e54070e9ae96849732aaae0c651de955c190ab9643d3bbc", size = 2428705, upload-time = "2025-07-10T22:24:26.45Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/26/9f0983fab26dc15d347eed7ca0700f905fa6a0bb6591702f6c99281ede2e/azure_cognitiveservices_speech-1.45.0-py3-none-win_arm64.whl", hash = "sha256:66d35847669313c9deeb09070c24e92f8e8cb06a8f792e5f6a5e75a4110cf71e", size = 2221054, upload-time = "2025-07-10T22:24:28.019Z" },
+]
+
+[[package]]
+name = "azure-core"
+version = "1.35.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "six" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ce/89/f53968635b1b2e53e4aad2dd641488929fef4ca9dfb0b97927fa7697ddf3/azure_core-1.35.0.tar.gz", hash = "sha256:c0be528489485e9ede59b6971eb63c1eaacf83ef53001bfe3904e475e972be5c", size = 339689, upload-time = "2025-07-03T00:55:23.496Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/78/bf94897361fdd650850f0f2e405b2293e2f12808239046232bdedf554301/azure_core-1.35.0-py3-none-any.whl", hash = "sha256:8db78c72868a58f3de8991eb4d22c4d368fae226dac1002998d6c50437e7dad1", size = 210708, upload-time = "2025-07-03T00:55:25.238Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2025.8.3"
 source = { registry = "https://pypi.org/simple" }
@@ -646,6 +677,9 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+azure = [
+    { name = "livekit-plugins-azure" },
+]
 cartesia = [
     { name = "livekit-plugins-cartesia" },
 ]
@@ -700,6 +734,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/71/e2/3c1671f7ed50db09813f6f06581b3acc93935f88352f96ce141b93e1f098/livekit_blingfire-1.0.0-cp313-cp313-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3c8d3a92a34925063ac05e70f6d4eebfeb9f9e29816868dece7159688b68cefe", size = 158534, upload-time = "2025-06-30T14:56:23.616Z" },
     { url = "https://files.pythonhosted.org/packages/14/e6/9f21edfdc7284d89e3f6a61db662e5b4eda45a7657628dd55308164386c0/livekit_blingfire-1.0.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:212ffef06b2e832758afcd1d19c709068207ad71f2fb5b426b6bb8e2773e9673", size = 167224, upload-time = "2025-06-30T14:56:24.811Z" },
     { url = "https://files.pythonhosted.org/packages/1f/d0/307cc89438888067a17a0c33329d59867516a616aab7618dcb43987165ea/livekit_blingfire-1.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:f3f4df6a51171a88c6863cea01c607661d6d6bc0398976a37ba0e4b3e3283433", size = 125486, upload-time = "2025-06-30T14:56:26.1Z" },
+]
+
+[[package]]
+name = "livekit-plugins-azure"
+version = "1.2.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-cognitiveservices-speech" },
+    { name = "livekit-agents" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/1f/464c19fe0bf9a1da0f044531b5774720a166e220e3082f8858adaeed79db/livekit_plugins_azure-1.2.8.tar.gz", hash = "sha256:618447af3d15df6c2d481e3dd24e83362e3deb54964d9a3cb8667f10b6c3ee9b", size = 9229, upload-time = "2025-09-02T01:07:08.106Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/a3/9b13013deeab792f72bda9343663f9fcae63d2172de61a5498786466b87d/livekit_plugins_azure-1.2.8-py3-none-any.whl", hash = "sha256:bf040348df820fbe5761a11a89b97276187f078f06bf7615b94935a0de02d447", size = 10536, upload-time = "2025-09-02T01:07:07.32Z" },
 ]
 
 [[package]]
@@ -817,7 +864,7 @@ name = "livekit-voice-agent"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "livekit-agents", extra = ["cartesia", "deepgram", "openai", "silero", "turn-detector"] },
+    { name = "livekit-agents", extra = ["azure", "cartesia", "deepgram", "openai", "silero", "turn-detector"] },
     { name = "livekit-plugins-groq" },
     { name = "livekit-plugins-noise-cancellation" },
     { name = "python-dotenv" },
@@ -825,7 +872,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", extras = ["cartesia", "deepgram", "openai", "silero", "turn-detector"], specifier = "~=1.2" },
+    { name = "livekit-agents", extras = ["azure", "cartesia", "deepgram", "openai", "silero", "turn-detector"], specifier = "~=1.2" },
     { name = "livekit-plugins-groq", specifier = ">=1.2.8" },
     { name = "livekit-plugins-noise-cancellation", specifier = "~=0.2" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
@@ -1549,6 +1596,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/fe/cad1d9762868c7c5dc70c8620074df28ebb1a8e4c17d4c0cb031889c457e/safetensors-0.6.2-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:d944cea65fad0ead848b6ec2c37cc0b197194bec228f8020054742190e9312ac", size = 655957, upload-time = "2025-08-08T13:13:57.029Z" },
     { url = "https://files.pythonhosted.org/packages/59/a7/e2158e17bbe57d104f0abbd95dff60dda916cf277c9f9663b4bf9bad8b6e/safetensors-0.6.2-cp38-abi3-win32.whl", hash = "sha256:cab75ca7c064d3911411461151cb69380c9225798a20e712b102edda2542ddb1", size = 308926, upload-time = "2025-08-08T13:14:01.095Z" },
     { url = "https://files.pythonhosted.org/packages/2c/c3/c0be1135726618dc1e28d181b8c442403d8dbb9e273fd791de2d4384bcdd/safetensors-0.6.2-cp38-abi3-win_amd64.whl", hash = "sha256:c7b214870df923cbc1593c3faee16bec59ea462758699bd3fee399d00aac072c", size = 320192, upload-time = "2025-08-08T13:13:59.467Z" },
+]
+
+[[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]
 
 [[package]]

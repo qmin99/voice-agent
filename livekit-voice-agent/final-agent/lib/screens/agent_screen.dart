@@ -3,7 +3,37 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:livekit_components/livekit_components.dart' as components;
 import 'package:livekit_client/livekit_client.dart' as lk;
+import 'package:voice_assistant/widgets/voicepad.dart';
 import '../controllers/app_ctrl.dart' as app_ctrl;
+
+// Model for storing chat sessions
+class ChatSession {
+  final String id;
+  final String title;
+  final DateTime createdAt;
+  final List<ChatMessage> messages;
+  
+  ChatSession({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    required this.messages,
+  });
+}
+
+class ChatMessage {
+  final String text;
+  final bool isLocal;
+  final DateTime timestamp;
+  
+  ChatMessage({
+    required this.text,
+    required this.isLocal,
+    required this.timestamp,
+  });
+}
+
+enum AppView { welcome, chat }
 
 class LegalChatInterface extends StatefulWidget {
   const LegalChatInterface({super.key});
@@ -14,12 +44,16 @@ class LegalChatInterface extends StatefulWidget {
 
 class _LegalChatInterfaceState extends State<LegalChatInterface> {
   final _scrollController = ScrollController();
-
+  AppView _currentView = AppView.welcome;
+  List<ChatSession> _chatHistory = [];
+  ChatSession? _currentChatSession;
+  
   @override
   void initState() {
     super.initState();
     // Add a listener to automatically scroll to the bottom on new messages
     context.read<app_ctrl.AppCtrl>().roomContext.addListener(_onRoomContextChanged);
+    _initializeChatHistory();
   }
 
   @override
@@ -27,6 +61,42 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     context.read<app_ctrl.AppCtrl>().roomContext.removeListener(_onRoomContextChanged);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _initializeChatHistory() {
+    // Initialize with sample chat history
+    _chatHistory = [
+      ChatSession(
+        id: '1',
+        title: 'Voice mode activated! I\'ll...',
+        createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        messages: [
+          ChatMessage(text: 'Hello, can you help me with a contract review?', isLocal: true, timestamp: DateTime.now().subtract(const Duration(days: 1))),
+          ChatMessage(text: 'Of course! I\'d be happy to help you with contract review. Please share the contract details and let me know what specific areas you\'d like me to focus on.', isLocal: false, timestamp: DateTime.now().subtract(const Duration(days: 1))),
+        ],
+      ),
+      ChatSession(
+        id: '2',
+        title: 'Contract Review Discussion',
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
+        messages: [
+          ChatMessage(text: 'I need help understanding liability clauses.', isLocal: true, timestamp: DateTime.now().subtract(const Duration(days: 2))),
+          ChatMessage(text: 'Liability clauses are crucial provisions that determine who bears responsibility for damages or losses. Let me explain the key types...', isLocal: false, timestamp: DateTime.now().subtract(const Duration(days: 2))),
+        ],
+      ),
+      ChatSession(
+        id: '3',
+        title: 'Legal Document Analysis',
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        messages: [],
+      ),
+      ChatSession(
+        id: '4',
+        title: 'Estate Planning Consultation',
+        createdAt: DateTime.now().subtract(const Duration(days: 4)),
+        messages: [],
+      ),
+    ];
   }
 
   void _onRoomContextChanged() {
@@ -41,6 +111,36 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     });
   }
 
+  void _startNewChat() {
+    setState(() {
+      _currentView = AppView.chat;
+      _currentChatSession = null; // Start fresh chat
+    });
+    // Connect to voice mode
+    // Add your connection logic here
+  }
+
+  void _endCurrentChat() {
+    // Disconnect from current session
+    context.read<app_ctrl.AppCtrl>().disconnect();
+    
+    // Save current chat if it has messages (you'll need to implement this based on your transcription data)
+    // _saveCurrentChatSession();
+    
+    setState(() {
+      _currentView = AppView.welcome;
+      _currentChatSession = null;
+    });
+  }
+
+  void _loadChatSession(ChatSession session) {
+    setState(() {
+      _currentView = AppView.chat;
+      _currentChatSession = session;
+    });
+    // Here you might want to restore the chat context or just show historical messages
+  }
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -51,551 +151,343 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
         child: Row(
           children: [
             // Left Sidebar
-            Container(
-              width: 300,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  right: BorderSide(
-                    color: Color(0xFFE2E8F0),
-                    width: 1,
+            _buildSidebar(),
+            
+            // Main Area - Either Welcome Screen or Chat Interface
+            Expanded(
+              child: _currentView == AppView.welcome 
+                ? _buildWelcomeScreen()
+                : _buildChatInterface(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 300,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          right: BorderSide(
+            color: Color(0xFFE2E8F0),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF153f1e),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.gavel_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Legal Assistant',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1e293b),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // New Chat Button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _startNewChat,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF153f1e),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text(
+                  'New chat',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
-              child: Column(
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Documents Section
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: const Row(
                 children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF153f1e),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.gavel_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Legal Assistant',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1e293b),
-                          ),
-                        ),
-                      ],
-                    ),
+                  Icon(
+                    Icons.folder_outlined,
+                    color: Color(0xFF64748b),
+                    size: 18,
                   ),
-                  
-                  // New Chat Button
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          // Handle new chat - could clear transcriptions
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF153f1e),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text(
-                          'New chat',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // Documents Section
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.folder_outlined,
-                            color: Color(0xFF64748b),
-                            size: 18,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Documents',
-                            style: TextStyle(
-                              color: Color(0xFF64748b),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Chat History Button
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.history,
-                            color: Color(0xFF64748b),
-                            size: 18,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'Chat History',
-                            style: TextStyle(
-                              color: Color(0xFF64748b),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Chat History List
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        _buildChatHistoryItem('Current Session', true),
-                        _buildChatHistoryItem('Contract Review Discussion', false),
-                        _buildChatHistoryItem('Legal Document Analysis', false),
-                        _buildChatHistoryItem('Estate Planning Consultation', false),
-                      ],
-                    ),
-                  ),
-                  
-                  // Settings
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.settings_outlined,
-                          color: Color(0xFF64748b),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Settings',
-                          style: TextStyle(
-                            color: Color(0xFF64748b),
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+                  SizedBox(width: 8),
+                  Text(
+                    'Documents',
+                    style: TextStyle(
+                      color: Color(0xFF64748b),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // Main Chat Area
-            Expanded(
-              child: Column(
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Chat History Section
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: const Row(
                 children: [
-                  // Chat Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: Color(0xFFE2E8F0),
-                          width: 1,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'AI Legal Assistant',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF1e293b),
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Live conversation active',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF10B981),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        // Connection Status
-                        Consumer<app_ctrl.AppCtrl>(
-                          builder: (context, appCtrl, child) {
-                            final isConnected = appCtrl.connectionState == app_ctrl.ConnectionState.connected;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: isConnected 
-                                  ? const Color(0xFF10B981).withOpacity(0.1)
-                                  : Colors.orange.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.circle,
-                                    color: isConnected ? const Color(0xFF10B981) : Colors.orange,
-                                    size: 8,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    isConnected ? 'Connected' : 'Connecting...',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isConnected ? const Color(0xFF10B981) : Colors.orange,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF8B5CF6).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Text(
-                            'Voice Mode',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF8B5CF6),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
+                  Icon(
+                    Icons.history,
+                    color: Color(0xFF64748b),
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Chat History',
+                    style: TextStyle(
+                      color: Color(0xFF64748b),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  
-                  // REAL Chat Messages - Connected to LiveKit transcriptions
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      child: GestureDetector(
-                        onTap: () => context.read<app_ctrl.AppCtrl>().messageFocusNode.unfocus(),
-                        child: components.TranscriptionBuilder(
-                          builder: (context, transcriptions) {
-                            return ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 10,
-                              ),
-                              itemCount: transcriptions.length,
-                              itemBuilder: (context, index) {
-                                final transcription = transcriptions[index];
-                                final participant = transcription.participant;
-                                final isLocal = participant is lk.LocalParticipant;
-                                
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 16),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Avatar
-                                      Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          color: isLocal
-                                            ? const Color(0xFF3B82F6)
-                                            : const Color(0xFF153f1e),
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                        child: Icon(
-                                          isLocal
-                                            ? Icons.person
-                                            : Icons.assistant_rounded,
-                                          color: Colors.white,
-                                          size: 18,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      // Message bubble
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: isLocal
-                                              ? const Color(0xFF3B82F6).withOpacity(0.1)
-                                              : const Color(0xFFF8FAFC),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: const Color(0xFFE2E8F0),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            transcription.segment.text,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Color(0xFF374151),
-                                              height: 1.4,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Chat History List
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _chatHistory.length,
+              itemBuilder: (context, index) {
+                final chatSession = _chatHistory[index];
+                final isActive = _currentChatSession?.id == chatSession.id && _currentView == AppView.chat;
+                return _buildChatHistoryItem(
+                  chatSession.title,
+                  isActive,
+                  () => _loadChatSession(chatSession),
+                );
+              },
+            ),
+          ),
+
+          // Divider
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 16),
+            height: 1,
+            width: double.infinity,
+            color: const Color(0xFFE2E8F0),
+          ),
+
+          // Hidden Voice Pad
+          const HiddenVoicePad(),
+          
+          // Settings Button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GestureDetector(
+              onTap: () {
+                // Handle settings
+              },
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
                   ),
-                  
-                  // REAL Input Area - Connected to actual message sending
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(
-                        top: BorderSide(
-                          color: Color(0xFFE2E8F0),
-                          width: 1,
-                        ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.settings_outlined,
+                      color: Color(0xFF64748b),
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Settings',
+                      style: TextStyle(
+                        color: Color(0xFF64748b),
+                        fontSize: 14,
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        // Real Text Input connected to AppCtrl
-                        Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Consumer<app_ctrl.AppCtrl>(
-                                  builder: (context, appCtrl, child) => KeyboardListener(
-                                    focusNode: FocusNode(),
-                                    onKeyEvent: (event) {
-                                      // Check for a KeyDown event to prevent multiple triggers
-                                      if (event is KeyDownEvent) {
-                                        if (event.logicalKey == LogicalKeyboardKey.enter) {
-                                          // Check the global state of the Shift key
-                                          if (HardwareKeyboard.instance.isShiftPressed) {
-                                            // Handle Shift + Enter for new line
-                                            appCtrl.messageCtrl.text += '\n';
-                                          } else {
-                                            // Handle Enter for sending the message
-                                            appCtrl.sendMessage();
-                                          }
-                                        }
-                                      }
-                                    },
-                                    child: TextField(
-                                      controller: appCtrl.messageCtrl,
-                                      focusNode: appCtrl.messageFocusNode,
-                                      decoration: const InputDecoration(
-                                        hintText: 'Type your legal question or speak...',
-                                        hintStyle: TextStyle(
-                                          color: Color(0xFF94A3B8),
-                                          fontSize: 14,
-                                        ),
-                                        border: InputBorder.none,
-                                        contentPadding: EdgeInsets.all(16),
-                                      ),
-                                      maxLines: null,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                margin: const EdgeInsets.all(4),
-                                child: IconButton(
-                                  onPressed: () {
-                                    // Handle voice input toggle
-                                    context.read<app_ctrl.AppCtrl>().toggleAgentScreenMode();
-                                  },
-                                  icon: const Icon(
-                                    Icons.mic_outlined,
-                                    color: Color(0xFF8B5CF6),
-                                  ),
-                                ),
-                              ),
-                              Consumer<app_ctrl.AppCtrl>(
-                                builder: (context, appCtrl, child) => Container(
-                                  margin: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: appCtrl.isSendButtonEnabled 
-                                      ? const Color(0xFF153f1e)
-                                      : const Color(0xFF94A3B8),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: IconButton(
-                                    onPressed: appCtrl.isSendButtonEnabled
-                                      ? () => appCtrl.sendMessage()
-                                      : null,
-                                    icon: const Icon(
-                                      Icons.send_rounded,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Bottom Action Buttons
-                        Row(
-                          children: [
-                            TextButton.icon(
-                              onPressed: () {
-                                // Disconnect and show the welcome screen
-                                context.read<app_ctrl.AppCtrl>().disconnect();
-                              },
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                color: Color(0xFF64748b),
-                                size: 16,
-                              ),
-                              label: const Text(
-                                'End Session',
-                                style: TextStyle(
-                                  color: Color(0xFF64748b),
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  // Handle invite features
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF10B981),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.person_add, size: 16),
-                                label: const Text(
-                                  'Invite',
-                                  style: TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  // Handle scanner
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF3B82F6),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.document_scanner, size: 16),
-                                label: const Text(
-                                  'Scanner',
-                                  style: TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  // Toggle back to audio visualizer
-                                  context.read<app_ctrl.AppCtrl>().toggleAgentScreenMode();
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF8B5CF6),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.graphic_eq, size: 16),
-                                label: const Text(
-                                  'Change Mode',
-                                  style: TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeScreen() {
+    return Container(
+      color: Colors.white,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Logo/Icon
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: const Color(0xFF153f1e).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.gavel_rounded,
+                color: Color(0xFF153f1e),
+                size: 40,
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Welcome Title
+            const Text(
+              'Welcome to HAAKEEM',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1e293b),
+              ),
+            ),
+            
+            const SizedBox(height: 8),
+            
+            // Subtitle
+            const Text(
+              'Your AI-powered legal assistant',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFF64748b),
+              ),
+            ),
+            
+            const SizedBox(height: 48),
+            
+            // Start Voice Mode Button
+            ElevatedButton.icon(
+              onPressed: _startNewChat,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF153f1e),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.mic_rounded, size: 20),
+              label: const Text(
+                'Start Voice Mode',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Alternative Text Mode Button
+            TextButton(
+              onPressed: _startNewChat,
+              child: const Text(
+                'Or start with text chat',
+                style: TextStyle(
+                  color: Color(0xFF153f1e),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 48),
+            
+            // Features
+            Container(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: const Column(
+                children: [
+                  _FeatureItem(
+                    icon: Icons.security,
+                    title: 'Secure & Confidential',
+                    description: 'Your conversations are encrypted and private',
+                  ),
+                  SizedBox(height: 16),
+                  _FeatureItem(
+                    icon: Icons.speed,
+                    title: 'Instant Legal Guidance',
+                    description: 'Get immediate answers to your legal questions',
+                  ),
+                  SizedBox(height: 16),
+                  _FeatureItem(
+                    icon: Icons.verified_user,
+                    title: 'Expert Knowledge',
+                    description: 'Powered by comprehensive legal databases',
                   ),
                 ],
               ),
@@ -605,39 +497,483 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
       ),
     );
   }
-  
-  Widget _buildChatHistoryItem(String title, bool isActive) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF153f1e).withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        border: isActive ? Border.all(
-          color: const Color(0xFF153f1e).withOpacity(0.2),
-        ) : null,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: isActive ? const Color(0xFF153f1e) : const Color(0xFF64748b),
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+
+  Widget _buildChatInterface() {
+    return Column(
+      children: [
+        // Chat Header
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              bottom: BorderSide(
+                color: Color(0xFFE2E8F0),
+                width: 1,
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (!isActive)
-            const Icon(
-              Icons.more_horiz,
-              color: Color(0xFF94A3B8),
-              size: 16,
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _currentChatSession?.title ?? 'HAAKEEM Assistant',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1e293b),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Attorney agent active',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              // Connection Status
+              Consumer<app_ctrl.AppCtrl>(
+                builder: (context, appCtrl, child) {
+                  final isConnected = appCtrl.connectionState == app_ctrl.ConnectionState.connected;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isConnected 
+                        ? const Color(0xFF10B981).withOpacity(0.1)
+                        : Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          color: isConnected ? const Color(0xFF10B981) : Colors.orange,
+                          size: 8,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isConnected ? 'Connected' : 'Connecting...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isConnected ? const Color(0xFF10B981) : Colors.orange,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Beginner Mode',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF8B5CF6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // End Chat Button
+              TextButton.icon(
+                onPressed: _endCurrentChat,
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: Color(0xFFEF4444),
+                  size: 16,
+                ),
+                label: const Text(
+                  'End Chat',
+                  style: TextStyle(
+                    color: Color(0xFFEF4444),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Chat Messages
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            child: GestureDetector(
+              onTap: () => context.read<app_ctrl.AppCtrl>().messageFocusNode.unfocus(),
+              child: _currentChatSession != null && _currentChatSession!.messages.isNotEmpty
+                ? _buildHistoricalMessages()
+                : _buildLiveTranscription(),
             ),
+          ),
+        ),
+        
+        // Input Area
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: Color(0xFFE2E8F0),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Text Input with Dark Green Send Button
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Text Input
+                    Expanded(
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 40),
+                        child: Consumer<app_ctrl.AppCtrl>(
+                          builder: (context, appCtrl, child) => TextField(
+                            controller: appCtrl.messageCtrl,
+                            focusNode: appCtrl.messageFocusNode,
+                            decoration: const InputDecoration(
+                              hintText: 'Hello. How are you?',
+                              hintStyle: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 14,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.all(16),
+                            ),
+                            maxLines: null,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.all(4),
+                      child: IconButton(
+                        onPressed: () {
+                          // Handle voice input toggle
+                          context.read<app_ctrl.AppCtrl>().toggleAgentScreenMode();
+                        },
+                        icon: const Icon(
+                          Icons.mic_outlined,
+                          color: Color(0xFF64748b),
+                        ),
+                      ),
+                    ),
+                    Consumer<app_ctrl.AppCtrl>(
+                      builder: (context, appCtrl, child) => Container(
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: appCtrl.isSendButtonEnabled 
+                            ? const Color(0xFF153f1e)
+                            : const Color(0xFF94A3B8),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: IconButton(
+                          onPressed: appCtrl.isSendButtonEnabled
+                            ? () => appCtrl.sendMessage()
+                            : null,
+                          icon: const Icon(
+                            Icons.send_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHistoricalMessages() {
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      itemCount: _currentChatSession!.messages.length,
+      itemBuilder: (context, index) {
+        final message = _currentChatSession!.messages[index];
+        return _buildMessageBubble(message.text, message.isLocal);
+      },
+    );
+  }
+
+  Widget _buildLiveTranscription() {
+    return components.TranscriptionBuilder(
+      builder: (context, transcriptions) {
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          itemCount: transcriptions.length,
+          itemBuilder: (context, index) {
+            final transcription = transcriptions[index];
+            final participant = transcription.participant;
+            final isLocal = participant is lk.LocalParticipant;
+            return _buildMessageBubble(transcription.segment.text, isLocal);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMessageBubble(String text, bool isLocal) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: isLocal 
+            ? MainAxisAlignment.end 
+            : MainAxisAlignment.start,
+        children: [
+          // For assistant messages: avatar first, then message
+          if (!isLocal) ...[
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF153f1e),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.assistant_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+          
+          // Message bubble - sized to content
+          Flexible(
+            child: IntrinsicWidth(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.7,
+                  minWidth: 100,
+                ),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isLocal
+                    ? const Color(0xFF153f1e).withOpacity(0.1)
+                    : const Color(0xFF153f1e).withOpacity(0.05),
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(12),
+                    topRight: const Radius.circular(12),
+                    bottomLeft: Radius.circular(isLocal ? 12 : 4),
+                    bottomRight: Radius.circular(isLocal ? 4 : 12),
+                  ),
+                  border: Border.all(
+                    color: isLocal 
+                      ? const Color(0xFF153f1e).withOpacity(0.2)
+                      : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: isLocal 
+                    ? CrossAxisAlignment.end 
+                    : CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Message content with copy button
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: SelectableText(
+                            text,
+                            textAlign: isLocal ? TextAlign.right : TextAlign.left,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isLocal 
+                                ? const Color(0xFF153f1e)
+                                : const Color(0xFF374151),
+                              height: 1.4,
+                              fontWeight: isLocal ? FontWeight.w500 : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Copy button with hover effect
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: text));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Copied to clipboard'),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: isLocal 
+                                  ? const Color(0xFF153f1e).withOpacity(0.7)
+                                  : const Color(0xFF64748b),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          
+          // For user messages: message first, then avatar
+          if (isLocal) ...[
+            const SizedBox(width: 12),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF153f1e),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.person,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+  
+  Widget _buildChatHistoryItem(String title, bool isActive, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isActive ? const Color(0xFF153f1e).withOpacity(0.1) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              border: isActive ? Border.all(
+                color: const Color(0xFF153f1e).withOpacity(0.2),
+              ) : null,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isActive ? const Color(0xFF153f1e) : const Color(0xFF64748b),
+                      fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!isActive)
+                  const Icon(
+                    Icons.more_horiz,
+                    color: Color(0xFF94A3B8),
+                    size: 16,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeatureItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+
+  const _FeatureItem({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFF153f1e).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            color: const Color(0xFF153f1e),
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1e293b),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF64748b),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
