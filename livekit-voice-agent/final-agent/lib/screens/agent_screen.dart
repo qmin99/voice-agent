@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:livekit_components/livekit_components.dart' as components;
 import 'package:livekit_client/livekit_client.dart' as lk;
+import 'package:voice_assistant/widgets/settings_modal.dart';
 import 'package:voice_assistant/widgets/voicepad.dart';
 import '../controllers/app_ctrl.dart' as app_ctrl;
 
@@ -60,13 +61,13 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
         .read<app_ctrl.AppCtrl>()
         .roomContext
         .addListener(_onRoomContextChanged);
-    
+
     // Add listener for transcriptions to detect when agent speaks
     context
         .read<app_ctrl.AppCtrl>()
         .roomContext
         .addListener(_onTranscriptionChanged);
-    
+
     _initializeChatHistory();
   }
 
@@ -86,11 +87,12 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
 
   // Add this method to detect agent speech
   void _onTranscriptionChanged() {
-    final transcriptions = context.read<app_ctrl.AppCtrl>().roomContext.transcriptions;
-    
+    final transcriptions =
+        context.read<app_ctrl.AppCtrl>().roomContext.transcriptions;
+
     // Check if any transcription is from a remote participant (the agent)
     for (final transcription in transcriptions) {
-      if (transcription.participant is! lk.LocalParticipant && 
+      if (transcription.participant is! lk.LocalParticipant &&
           transcription.segment.text.trim().isNotEmpty) {
         if (!_hasAgentSpoken && _shouldShowInitialLoading) {
           setState(() {
@@ -606,41 +608,72 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
           const HiddenVoicePad(),
 
           // Settings Button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: GestureDetector(
-              onTap: () {
-                // Handle settings
-              },
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFFE2E8F0),
+       Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 16),
+  child: StatefulBuilder(
+    builder: (context, setState) {
+      bool isHovering = false;
+      return MouseRegion(
+        onEnter: (_) => setState(() => isHovering = true),
+        onExit: (_) => setState(() => isHovering = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: () {
+            showSettingsModal(context);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isHovering 
+                  ? const Color(0xFF153f1e).withOpacity(0.08)
+                  : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isHovering 
+                    ? const Color(0xFF153f1e).withOpacity(0.3)
+                    : const Color(0xFFE2E8F0),
+                width: isHovering ? 1.5 : 1,
+              ),
+              boxShadow: isHovering 
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF153f1e).withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.settings_outlined,
+                  color: isHovering 
+                      ? const Color(0xFF153f1e)
+                      : const Color(0xFF64748b),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Settings',
+                  style: TextStyle(
+                    color: isHovering 
+                        ? const Color(0xFF153f1e)
+                        : const Color(0xFF64748b),
+                    fontSize: 14,
+                    fontWeight: isHovering ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
-                child: const Row(
-                  children: [
-                    Icon(
-                      Icons.settings_outlined,
-                      color: Color(0xFF64748b),
-                      size: 18,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Settings',
-                      style: TextStyle(
-                        color: Color(0xFF64748b),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ),
           ),
+        ),
+      );
+    },
+  ),
+),
 
           const SizedBox(height: 16),
         ],
@@ -751,250 +784,257 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     );
   }
 
-Widget _buildChatInterface() {
-  return Stack(
-    children: [
-      Column(
-        children: [
-          // Chat Header
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                bottom: BorderSide(
-                  color: Color(0xFFE2E8F0),
-                  width: 1,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _currentChatSession?.title ?? 'HAAKEEM Assistant',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1e293b),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Attorney agent active',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF10B981),
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                // Connection Status
-                Consumer<app_ctrl.AppCtrl>(
-                  builder: (context, appCtrl, child) {
-                    final isConnected = appCtrl.connectionState ==
-                        app_ctrl.ConnectionState.connected;
-                    return Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: isConnected
-                            ? const Color(0xFF10B981).withOpacity(0.1)
-                            : Colors.orange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.circle,
-                            color: isConnected
-                                ? const Color(0xFF10B981)
-                                : Colors.orange,
-                            size: 8,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            isConnected ? 'Connected' : 'Connecting...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isConnected
-                                  ? const Color(0xFF10B981)
-                                  : Colors.orange,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Text(
-                    'Beginner Mode',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF8B5CF6),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // End Chat Button
-                TextButton.icon(
-                  onPressed: _endCurrentChat,
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    color: Color(0xFFEF4444),
-                    size: 16,
-                  ),
-                  label: const Text(
-                    'End Chat',
-                    style: TextStyle(
-                      color: Color(0xFFEF4444),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Chat Messages
-          Expanded(
-            child: Container(
+  Widget _buildChatInterface() {
+    return Stack(
+      children: [
+        Column(
+          children: [
+            // Chat Header
+            Container(
               padding: const EdgeInsets.all(20),
-              child: GestureDetector(
-                onTap: () =>
-                    context.read<app_ctrl.AppCtrl>().messageFocusNode.unfocus(),
-                child: _currentChatSession != null &&
-                        _currentChatSession!.messages.isNotEmpty
-                    ? _buildHistoricalMessages()
-                    : _buildLiveTranscription(),
-              ),
-            ),
-          ),
-
-          // Input Area
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                top: BorderSide(
-                  color: Color(0xFFE2E8F0),
-                  width: 1,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(
+                    color: Color(0xFFE2E8F0),
+                    width: 1,
+                  ),
                 ),
               ),
-            ),
-            child: Column(
-              children: [
-                // Text Input with Dark Green Send Button
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Row(
+              child: Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Text Input
-                      Expanded(
-                        child: Container(
-                          constraints: const BoxConstraints(minHeight: 40),
-                          child: Consumer<app_ctrl.AppCtrl>(
-                            builder: (context, appCtrl, child) => TextField(
-                              controller: appCtrl.messageCtrl,
-                              focusNode: appCtrl.messageFocusNode,
-                              decoration: const InputDecoration(
-                                hintText: 'Hello. How are you?',
-                                hintStyle: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 14,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.all(16),
-                              ),
-                              maxLines: null,
-                            ),
-                          ),
+                      Text(
+                        _currentChatSession?.title ?? 'HAAKEEM Assistant',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1e293b),
                         ),
                       ),
-                      Container(
-                        margin: const EdgeInsets.all(4),
-                        child: IconButton(
-                          onPressed: () {
-                            // Handle voice input toggle
-                            context
-                                .read<app_ctrl.AppCtrl>()
-                                .toggleAgentScreenMode();
-                          },
-                          icon: const Icon(
-                            Icons.mic_outlined,
-                            color: Color(0xFF64748b),
-                          ),
-                        ),
-                      ),
-                      Consumer<app_ctrl.AppCtrl>(
-                        builder: (context, appCtrl, child) => Container(
-                          margin: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: appCtrl.isSendButtonEnabled
-                                ? const Color(0xFF153f1e)
-                                : const Color(0xFF94A3B8),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: IconButton(
-                            onPressed: appCtrl.isSendButtonEnabled
-                                ? () => appCtrl.sendMessage()
-                                : null,
-                            icon: const Icon(
-                              Icons.send_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Attorney agent active',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF10B981),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                  const Spacer(),
+                  // Connection Status
+                  Consumer<app_ctrl.AppCtrl>(
+                    builder: (context, appCtrl, child) {
+                      final isConnected = appCtrl.connectionState ==
+                          app_ctrl.ConnectionState.connected;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isConnected
+                              ? const Color(0xFF10B981).withOpacity(0.1)
+                              : Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.circle,
+                              color: isConnected
+                                  ? const Color(0xFF10B981)
+                                  : Colors.orange,
+                              size: 8,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              isConnected ? 'Connected' : 'Connecting...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isConnected
+                                    ? const Color(0xFF10B981)
+                                    : Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Text(
+                      'Beginner Mode',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF8B5CF6),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // End Chat Button
+                  TextButton.icon(
+                    onPressed: _endCurrentChat,
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Color(0xFFEF4444),
+                      size: 16,
+                    ),
+                    label: const Text(
+                      'End Chat',
+                      style: TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-      
-      // UPDATED: Loading overlay - hide when agent speaks
-      Consumer<app_ctrl.AppCtrl>(
-        builder: (context, appCtrl, child) {
-          // Show loading only if agent hasn't spoken yet
-          bool showLoading = _shouldShowInitialLoading && !_hasAgentSpoken &&
-                            (appCtrl.connectionState == app_ctrl.ConnectionState.connecting ||
-                             appCtrl.connectionState == app_ctrl.ConnectionState.connected);
-          
-          if (showLoading) {
-            return _buildVoiceAgentLoadingOverlay();
-          }
-          return const SizedBox.shrink();
-        },
-      ),
-    ],
-  );
-}
+
+            // Chat Messages
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                child: GestureDetector(
+                  onTap: () => context
+                      .read<app_ctrl.AppCtrl>()
+                      .messageFocusNode
+                      .unfocus(),
+                  child: _currentChatSession != null &&
+                          _currentChatSession!.messages.isNotEmpty
+                      ? _buildHistoricalMessages()
+                      : _buildLiveTranscription(),
+                ),
+              ),
+            ),
+
+            // Input Area
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  top: BorderSide(
+                    color: Color(0xFFE2E8F0),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Text Input with Dark Green Send Button
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // Text Input
+                        Expanded(
+                          child: Container(
+                            constraints: const BoxConstraints(minHeight: 40),
+                            child: Consumer<app_ctrl.AppCtrl>(
+                              builder: (context, appCtrl, child) => TextField(
+                                controller: appCtrl.messageCtrl,
+                                focusNode: appCtrl.messageFocusNode,
+                                decoration: const InputDecoration(
+                                  hintText: 'Hello. How are you?',
+                                  hintStyle: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 14,
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.all(16),
+                                ),
+                                maxLines: null,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          margin: const EdgeInsets.all(4),
+                          child: IconButton(
+                            onPressed: () {
+                              // Handle voice input toggle
+                              context
+                                  .read<app_ctrl.AppCtrl>()
+                                  .toggleAgentScreenMode();
+                            },
+                            icon: const Icon(
+                              Icons.mic_outlined,
+                              color: Color(0xFF64748b),
+                            ),
+                          ),
+                        ),
+                        Consumer<app_ctrl.AppCtrl>(
+                          builder: (context, appCtrl, child) => Container(
+                            margin: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: appCtrl.isSendButtonEnabled
+                                  ? const Color(0xFF153f1e)
+                                  : const Color(0xFF94A3B8),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: IconButton(
+                              onPressed: appCtrl.isSendButtonEnabled
+                                  ? () => appCtrl.sendMessage()
+                                  : null,
+                              icon: const Icon(
+                                Icons.send_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        // UPDATED: Loading overlay - hide when agent speaks
+        Consumer<app_ctrl.AppCtrl>(
+          builder: (context, appCtrl, child) {
+            // Show loading only if agent hasn't spoken yet
+            bool showLoading = _shouldShowInitialLoading &&
+                !_hasAgentSpoken &&
+                (appCtrl.connectionState ==
+                        app_ctrl.ConnectionState.connecting ||
+                    appCtrl.connectionState ==
+                        app_ctrl.ConnectionState.connected);
+
+            if (showLoading) {
+              return _buildVoiceAgentLoadingOverlay();
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+      ],
+    );
+  }
 
   Widget _buildHistoricalMessages() {
     return ListView.builder(
@@ -1217,7 +1257,7 @@ class _FloatingLoadingDots extends StatefulWidget {
   State<_FloatingLoadingDots> createState() => _FloatingLoadingDotsState();
 }
 
-class _FloatingLoadingDotsState extends State<_FloatingLoadingDots> 
+class _FloatingLoadingDotsState extends State<_FloatingLoadingDots>
     with TickerProviderStateMixin {
   late List<AnimationController> _controllers;
   late List<Animation<double>> _scaleAnimations;
@@ -1226,25 +1266,23 @@ class _FloatingLoadingDotsState extends State<_FloatingLoadingDots>
   @override
   void initState() {
     super.initState();
-    
-    _controllers = List.generate(3, (index) => 
-      AnimationController(
-        duration: Duration(milliseconds: 800 + (index * 100)),
-        vsync: this,
-      )
-    );
-    
-    _scaleAnimations = _controllers.map((controller) => 
-      Tween(begin: 0.3, end: 1.0).animate(
-        CurvedAnimation(parent: controller, curve: Curves.easeInOut)
-      )
-    ).toList();
 
-    _floatAnimations = _controllers.map((controller) => 
-      Tween(begin: 0.0, end: -8.0).animate(
-        CurvedAnimation(parent: controller, curve: Curves.easeInOut)
-      )
-    ).toList();
+    _controllers = List.generate(
+        3,
+        (index) => AnimationController(
+              duration: Duration(milliseconds: 800 + (index * 100)),
+              vsync: this,
+            ));
+
+    _scaleAnimations = _controllers
+        .map((controller) => Tween(begin: 0.3, end: 1.0).animate(
+            CurvedAnimation(parent: controller, curve: Curves.easeInOut)))
+        .toList();
+
+    _floatAnimations = _controllers
+        .map((controller) => Tween(begin: 0.0, end: -8.0).animate(
+            CurvedAnimation(parent: controller, curve: Curves.easeInOut)))
+        .toList();
 
     _startAnimations();
   }
@@ -1258,7 +1296,7 @@ class _FloatingLoadingDotsState extends State<_FloatingLoadingDots>
         }
       }
       await Future.delayed(const Duration(milliseconds: 300));
-      
+
       for (int i = 0; i < _controllers.length; i++) {
         if (mounted) {
           _controllers[i].reverse();
@@ -1286,7 +1324,8 @@ class _FloatingLoadingDotsState extends State<_FloatingLoadingDots>
         crossAxisAlignment: CrossAxisAlignment.end,
         children: List.generate(3, (index) {
           return AnimatedBuilder(
-            animation: Listenable.merge([_scaleAnimations[index], _floatAnimations[index]]),
+            animation: Listenable.merge(
+                [_scaleAnimations[index], _floatAnimations[index]]),
             builder: (context, child) {
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -1298,7 +1337,8 @@ class _FloatingLoadingDotsState extends State<_FloatingLoadingDots>
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF153f1e).withOpacity(_scaleAnimations[index].value),
+                        color: const Color(0xFF153f1e)
+                            .withOpacity(_scaleAnimations[index].value),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
