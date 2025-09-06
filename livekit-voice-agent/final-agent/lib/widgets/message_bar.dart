@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_sficon/flutter_sficon.dart' as sf;
 
 import '../ui/color_pallette.dart';
@@ -65,15 +66,34 @@ class MessageBar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                focusNode: focusNode,
-                controller: controller,
-                decoration: const InputDecoration.collapsed(
-                  hintText: 'Message...',
-                ),
-                minLines: 1,
-                maxLines: 3,
-              ),
+              child: Focus(
+  onKeyEvent: (FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+      if (HardwareKeyboard.instance.isShiftPressed) {
+        // Shift+Enter: Allow new line
+        return KeyEventResult.ignored;
+      } else {
+        // Enter alone: Send message
+        if (isSendEnabled && (controller?.text.trim().isNotEmpty ?? false)) {
+          onSendTap?.call();
+        }
+        return KeyEventResult.handled; // Prevent new line
+      }
+    }
+    return KeyEventResult.ignored;
+  },
+  child: TextField(
+    focusNode: focusNode,
+    controller: controller,
+    decoration: const InputDecoration.collapsed(
+      hintText: 'Message...',
+    ),
+    minLines: 1,
+    maxLines: 3,
+    keyboardType: TextInputType.multiline,
+    textInputAction: TextInputAction.newline, // Important for Shift+Enter
+  ),
+),
             ),
             MessageBarButton(
               isEnabled: isSendEnabled,

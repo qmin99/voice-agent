@@ -951,24 +951,43 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                         // Text Input
                         Expanded(
                           child: Container(
-                            constraints: const BoxConstraints(minHeight: 40),
-                            child: Consumer<app_ctrl.AppCtrl>(
-                              builder: (context, appCtrl, child) => TextField(
-                                controller: appCtrl.messageCtrl,
-                                focusNode: appCtrl.messageFocusNode,
-                                decoration: const InputDecoration(
-                                  hintText: 'Hello. How are you?',
-                                  hintStyle: TextStyle(
-                                    color: Color(0xFF94A3B8),
-                                    fontSize: 14,
-                                  ),
-                                  border: InputBorder.none,
-                                  contentPadding: EdgeInsets.all(16),
-                                ),
-                                maxLines: null,
-                              ),
-                            ),
-                          ),
+  constraints: const BoxConstraints(minHeight: 40),
+  child: Consumer<app_ctrl.AppCtrl>(
+    builder: (context, appCtrl, child) => RawKeyboardListener(
+      focusNode: FocusNode(),
+      onKey: (RawKeyEvent event) {
+        if (event is RawKeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+          if (event.isShiftPressed) {
+            // Shift+Enter: Add new line - let the default behavior happen
+            return;
+          } else {
+            // Enter alone: Send message and prevent default behavior
+            if (appCtrl.isSendButtonEnabled && appCtrl.messageCtrl.text.trim().isNotEmpty) {
+              appCtrl.sendMessage();
+            }
+            // Don't add the event to prevent new line
+            return;
+          }
+        }
+      },
+      child: TextField(
+        controller: appCtrl.messageCtrl,
+        focusNode: appCtrl.messageFocusNode,
+        decoration: const InputDecoration(
+          hintText: 'Hello. How are you?',
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        maxLines: null, // Allow multiple lines
+        keyboardType: TextInputType.multiline,
+        textInputAction: TextInputAction.newline, // Allow new lines with Shift+Enter
+        onTapOutside: (event) {
+          appCtrl.messageFocusNode.unfocus();
+        },
+      ),
+    ),
+  ),
+),
                         ),
                         Container(
                           margin: const EdgeInsets.all(4),

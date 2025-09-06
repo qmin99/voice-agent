@@ -2,7 +2,7 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.agents import AgentSession, Agent, RoomInputOptions, AutoSubscribe, JobContext
 from livekit.plugins import (
     groq,
     deepgram,
@@ -10,58 +10,34 @@ from livekit.plugins import (
     silero,
 )
 from livekit.plugins.azure import TTS as AzureTTS
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-# Load environment variables
 load_dotenv(".env.local")
-
-# Set up logging
 logger = logging.getLogger(__name__)
 
 class HaakeemAssistant(Agent):
     def __init__(self) -> None:
         super().__init__(
-            instructions="""You are  a professional AI legal assistant. You are knowledgeable, helpful, and speak in a clear, professional manner. 
-            
-Key guidelines:
-- Provide accurate legal information but remind users you're not a substitute for professional legal advice
-- Be concise but thorough in your responses
-- Maintain a professional yet friendly tone
-- If unsure about legal specifics, recommend consulting with a qualified attorney
-- Help with contract reviews, legal document analysis, and general legal questions
-            
-Keep your responses conversational and avoid being overly verbose."""
+            instructions="""You are a professional AI legal assistant. Be concise and helpful."""
         )
 
-async def entrypoint(ctx: agents.JobContext):
-    """Main entrypoint for the agent"""
-    session = None
-    agent = None
-    
+async def entrypoint(ctx: JobContext):
     try:
         logger.info(f"Starting HAAKEEM for room: {ctx.room.name}")
         
-        # Create agent instance
+        # Connect and wait for participant (CRITICAL!)
+        await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+        participant = await ctx.wait_for_participant()
+        logger.info(f"Starting voice assistant for participant {participant.identity}")
+        
         agent = HaakeemAssistant()
         
-        # Create session with only valid parameters
         session = AgentSession(
-            stt=deepgram.STT(
-                model="nova-3", 
-                language="multi"
-            ),
-            llm=groq.LLM(
-                model="llama-3.3-70b-versatile"
-            ), 
-            tts=AzureTTS(
-                voice="en-US-DavisNeural",
-                language="en-US"
-            ),
+            stt=deepgram.STT(model="nova-3", language="en"),
+            llm=groq.LLM(model="llama-3.3-70b-versatile"), 
+            tts=AzureTTS(voice="en-US-DavisNeural", language="en-US"),
             vad=silero.VAD.load(),
-            turn_detection=MultilingualModel(),
         )
         
-        # Start the session
         await session.start(
             room=ctx.room,
             agent=agent,
@@ -71,44 +47,15 @@ async def entrypoint(ctx: agents.JobContext):
             ),
         )
         
-        # Wait for connection to stabilize
-        await asyncio.sleep(1.0)
+        # Send greeting and let session continue
+        logger.info("Sending greeting...")
+        await session.say("Hello! I'm your AI legal assistant. How can I help you today?")
+        logger.info("Greeting sent successfully")
         
-        # Send greeting
-        try:
-            await asyncio.wait_for(
-                session.generate_reply(
-                    instructions="Greet the user briefly as their AI legal assistant, and ask how you can help them today."
-                ),
-                timeout=10.0
-            )
-            logger.info("Greeting sent successfully")
-        except asyncio.TimeoutError:
-            logger.warning("Greeting timed out")
-        except Exception as e:
-            logger.warning(f"Greeting failed: {e}")
-        
-        # Wait for session to complete
-        await session.aclose()
+        # DON'T call session.aclose() - let it run indefinitely!
         
     except Exception as e:
         logger.error(f"Error in agent session: {e}")
-        
-    finally:
-        # Clean up
-        logger.info("Cleaning up agent session")
-        
-        if session:
-            try:
-                await session.aclose()
-            except:
-                pass
-                
-        # Force cleanup
-        import gc
-        gc.collect()
-        
-        logger.info("Agent session cleanup completed")
 
 if __name__ == "__main__":
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))
