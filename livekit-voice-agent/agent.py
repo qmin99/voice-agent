@@ -21,23 +21,24 @@ class HaakeemAssistant(Agent):
         )
 
 async def entrypoint(ctx: JobContext):
+    session = None  # Define session outside the try block
     try:
         logger.info(f"Starting HAAKEEM for room: {ctx.room.name}")
-        
+
         # Connect and wait for participant (CRITICAL!)
         await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
         participant = await ctx.wait_for_participant()
         logger.info(f"Starting voice assistant for participant {participant.identity}")
-        
+
         agent = HaakeemAssistant()
-        
+
         session = AgentSession(
             stt=deepgram.STT(model="nova-3", language="en"),
-            llm=groq.LLM(model="llama-3.3-70b-versatile"), 
+            llm=groq.LLM(model="llama-3.3-70b-versatile"),
             tts=AzureTTS(voice="en-US-DavisNeural", language="en-US"),
             vad=silero.VAD.load(),
         )
-        
+
         await session.start(
             room=ctx.room,
             agent=agent,
@@ -46,16 +47,27 @@ async def entrypoint(ctx: JobContext):
                 close_on_disconnect=True,
             ),
         )
-        
-        # Send greeting and let session continue
-        logger.info("Sending greeting...")
-        await session.say("Hello! I'm your AI legal assistant. How can I help you today?")
-        logger.info("Greeting sent successfully")
-        
+
+        # Send greeting with enhanced error handling
+        logger.info("Attempting to send greeting...")
+        try:
+            await session.say("Hello! I'm your AI legal assistant. How can I help you today?")
+            logger.info("Greeting sent successfully")
+        except Exception as say_e:
+            logger.error(f"Failed to send greeting: {say_e}")
+            # Re-raise the exception so the main handler can clean up
+            raise say_e
+
         # DON'T call session.aclose() - let it run indefinitely!
-        
+        # The session will close automatically when the room or a participant disconnects
+        # due to the `close_on_disconnect=True` setting.
+
     except Exception as e:
         logger.error(f"Error in agent session: {e}")
+    finally:
+        # Ensure the session is closed, even if an exception occurs
+        if session:
+            await session.aclose()
 
 if __name__ == "__main__":
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))

@@ -1,9 +1,11 @@
 import 'dart:ui';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import 'package:livekit_components/livekit_components.dart' as components;
 import 'package:livekit_client/livekit_client.dart' as lk;
@@ -76,12 +78,14 @@ class ChatMessage {
   final bool isLocal;
   final DateTime timestamp;
   final List<AttachedFile>? attachedFiles;
+  final bool isTyping;
 
   ChatMessage({
     required this.text,
     required this.isLocal,
     required this.timestamp,
     this.attachedFiles,
+    this.isTyping = false,
   });
 }
 
@@ -101,7 +105,8 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
   ChatSession? _currentChatSession;
   bool _shouldShowInitialLoading = true;
   bool _hasAgentSpoken = false;
-  
+  bool _isProcessingAI = false;
+
   // Advanced file attachment state
   List<AttachedFile> attachedFiles = [];
   Map<String, TextEditingController> filePromptControllers = {};
@@ -136,12 +141,12 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
         .roomContext
         .removeListener(_onTranscriptionChanged);
     _scrollController.dispose();
-    
+
     // Dispose file prompt controllers
     for (var controller in filePromptControllers.values) {
       controller.dispose();
     }
-    
+
     super.dispose();
   }
 
@@ -233,6 +238,123 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     });
   }
 
+  // AI response loading icon for chat bubbles (from first file)
+  Widget _buildLoadingIcon() {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(DateTime.now().millisecondsSinceEpoch),
+      duration: const Duration(milliseconds: 1200),
+      tween: Tween<double>(begin: 0, end: 1),
+      onEnd: () {
+        if (mounted && _isProcessingAI) {
+          _safeSetState(() {});
+        }
+      },
+      builder: (context, double value, child) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Transform.rotate(
+              angle: value * 2 * math.pi,
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: SweepGradient(
+                    colors: [
+                      const Color(0xFF153F1E).withOpacity(0.1),
+                      const Color(0xFF153F1E).withOpacity(0.8),
+                      const Color(0xFF153F1E),
+                      const Color(0xFF153F1E).withOpacity(0.1),
+                    ],
+                    stops: const [0.0, 0.3, 0.7, 1.0],
+                  ),
+                ),
+                child: Container(
+                  margin: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            Transform.scale(
+              scale: 0.4 + (math.sin(value * 4 * math.pi) * 0.2),
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF153F1E),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // AI response typing indicator for chat bubbles (from first file)
+  Widget _buildTypingIndicator() {
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(DateTime.now().millisecondsSinceEpoch),
+      duration: const Duration(milliseconds: 1500),
+      tween: Tween<double>(begin: 0, end: 1),
+      onEnd: () {
+        if (mounted && _isProcessingAI) {
+          _safeSetState(() {});
+        }
+      },
+      builder: (context, double value, child) {
+        List<Widget> dots = [];
+        for (int i = 0; i < 3; i++) {
+          double delay = i * 0.2;
+          double animationValue = (value + delay) % 1.0;
+          double yOffset = math.sin(animationValue * 2 * math.pi) * 3;
+          double opacity = 0.3 +
+              (math.sin(animationValue * 2 * math.pi + math.pi / 2) + 1) * 0.35;
+
+          dots.add(
+            Transform.translate(
+              offset: Offset(0, yOffset),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 1),
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF153F1E).withOpacity(opacity),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Processing your request',
+              style: TextStyle(
+                fontSize: 14,
+                color: Color(0xFF64748b),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: dots,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ORIGINAL loading screen overlay - NOT CHANGED
   Widget _buildVoiceAgentLoadingOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.7),
@@ -271,8 +393,8 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              const Color(0xFF153f1e),
-                              const Color(0xFF1e5e29),
+                              const Color.fromARGB(114, 23, 81, 39),
+                              const Color.fromARGB(110, 118, 132, 120),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(20),
@@ -312,10 +434,17 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                               },
                             ),
                             // Icon
-                            const Icon(
-                              Icons.gavel_rounded,
-                              color: Colors.white,
-                              size: 40,
+                            SizedBox(
+                              width: 40,
+                              height: 40,
+                              child: Lottie.asset(
+                                'robot_lottie.json',
+                                width: 40,
+                                height: 40,
+                                fit: BoxFit.contain,
+                                repeat: true,
+                                animate: true,
+                              ),
                             ),
                           ],
                         ),
@@ -329,10 +458,10 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                 // Loading title with typing effect
                 TweenAnimationBuilder<int>(
                   duration: const Duration(milliseconds: 1200),
-                  tween: IntTween(begin: 0, end: "Initializing HAAKEEM".length),
+                  tween: IntTween(begin: 0, end: "Initializing Hakeem".length),
                   builder: (context, value, child) {
                     return Text(
-                      "Initializing HAAKEEM".substring(0, value),
+                      "Initializing Haakeem".substring(0, value),
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
@@ -1205,7 +1334,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                 children: [
                   // Attachment Preview
                   _buildAttachmentPreview(),
-                  
+
                   // Text Input with Attach, Mic, and Send buttons
                   Container(
                     padding:
@@ -1224,77 +1353,66 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                           margin: const EdgeInsets.all(4),
                           child: Material(
                             color: Colors.transparent,
-                            child: InkWell(
-                              onTap: _isUploading ? null : _scanDocuments,
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: _isUploading
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(
-                                            Color(0xFF64748b),
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: InkWell(
+                                onTap: _isUploading ? null : _scanDocuments,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: _isUploading
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                              Color(0xFF64748b),
+                                            ),
                                           ),
+                                        )
+                                      : const Icon(
+                                          Icons.attach_file_rounded,
+                                          color: Color(0xFF64748b),
+                                          size: 20,
                                         ),
-                                      )
-                                    : const Icon(
-                                        Icons.attach_file_rounded,
-                                        color: Color(0xFF64748b),
-                                        size: 20,
-                                      ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                        
+
                         // Text Input
                         Expanded(
                           child: Container(
                             constraints: const BoxConstraints(minHeight: 40),
                             child: Consumer<app_ctrl.AppCtrl>(
-                              builder: (context, appCtrl, child) =>
-                                  RawKeyboardListener(
-                                focusNode: FocusNode(),
-                                onKey: (RawKeyEvent event) {
-                                  if (event is RawKeyDownEvent &&
-                                      event.logicalKey ==
-                                          LogicalKeyboardKey.enter) {
-                                    if (event.isShiftPressed) {
-                                      return;
-                                    } else {
-                                      if (appCtrl.isSendButtonEnabled &&
-                                          appCtrl.messageCtrl.text
-                                              .trim()
-                                              .isNotEmpty) {
-                                        _sendMessage(appCtrl.messageCtrl.text);
-                                      }
-                                      return;
-                                    }
+                              builder: (context, appCtrl, child) => TextField(
+                                controller: appCtrl.messageCtrl,
+                                focusNode: appCtrl.messageFocusNode,
+                                decoration: const InputDecoration(
+                                  hintText: 'Hello. How are you?',
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12),
+                                ),
+                                maxLines: null,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.send,
+                                onTapOutside: (event) {
+                                  appCtrl.messageFocusNode.unfocus();
+                                },
+                                onSubmitted: (value) {
+                                  if (value.trim().isNotEmpty ||
+                                      attachedFiles.isNotEmpty) {
+                                    _sendMessage(value);
                                   }
                                 },
-                                child: TextField(
-                                  controller: appCtrl.messageCtrl,
-                                  focusNode: appCtrl.messageFocusNode,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Hello. How are you?',
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 12),
-                                  ),
-                                  maxLines: null,
-                                  keyboardType: TextInputType.multiline,
-                                  textInputAction: TextInputAction.newline,
-                                  onTapOutside: (event) {
-                                    appCtrl.messageFocusNode.unfocus();
-                                  },
-                                ),
                               ),
                             ),
                           ),
@@ -1303,37 +1421,49 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                         // Voice Input Button
                         Container(
                           margin: const EdgeInsets.all(4),
-                          child: IconButton(
-                            onPressed: () {
-                              context
-                                  .read<app_ctrl.AppCtrl>()
-                                  .toggleAgentScreenMode();
-                            },
-                            icon: const Icon(
-                              Icons.mic_outlined,
-                              color: Color(0xFF64748b),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: IconButton(
+                              onPressed: () {
+                                context
+                                    .read<app_ctrl.AppCtrl>()
+                                    .toggleAgentScreenMode();
+                              },
+                              icon: const Icon(
+                                Icons.mic_outlined,
+                                color: Color(0xFF64748b),
+                              ),
                             ),
                           ),
                         ),
 
                         // Send Button
                         Consumer<app_ctrl.AppCtrl>(
-                          builder: (context, appCtrl, child) => Container(
-                            margin: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: (appCtrl.isSendButtonEnabled || attachedFiles.isNotEmpty)
-                                  ? const Color(0xFF153f1e)
-                                  : const Color(0xFF94A3B8),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: IconButton(
-                              onPressed: (appCtrl.isSendButtonEnabled || attachedFiles.isNotEmpty)
-                                  ? () => _sendMessage(appCtrl.messageCtrl.text)
-                                  : null,
-                              icon: const Icon(
-                                Icons.send_rounded,
-                                color: Colors.white,
-                                size: 18,
+                          builder: (context, appCtrl, child) => MouseRegion(
+                            cursor: (appCtrl.isSendButtonEnabled ||
+                                    attachedFiles.isNotEmpty)
+                                ? SystemMouseCursors.click
+                                : SystemMouseCursors.forbidden,
+                            child: Container(
+                              margin: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: (appCtrl.isSendButtonEnabled ||
+                                        attachedFiles.isNotEmpty)
+                                    ? const Color(0xFF153f1e)
+                                    : const Color(0xFF94A3B8),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: IconButton(
+                                onPressed: (appCtrl.isSendButtonEnabled ||
+                                        attachedFiles.isNotEmpty)
+                                    ? () =>
+                                        _sendMessage(appCtrl.messageCtrl.text)
+                                    : null,
+                                icon: const Icon(
+                                  Icons.send_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                               ),
                             ),
                           ),
@@ -1374,8 +1504,8 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
       itemCount: _currentChatSession!.messages.length,
       itemBuilder: (context, index) {
         final message = _currentChatSession!.messages[index];
-        return _buildMessageBubble(message.text, message.isLocal, 
-            attachedFiles: message.attachedFiles);
+        return _buildMessageBubble(message.text, message.isLocal,
+            attachedFiles: message.attachedFiles, isTyping: message.isTyping);
       },
     );
   }
@@ -1398,7 +1528,8 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isLocal, {List<AttachedFile>? attachedFiles}) {
+  Widget _buildMessageBubble(String text, bool isLocal,
+      {List<AttachedFile>? attachedFiles, bool isTyping = false}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -1406,20 +1537,23 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
         mainAxisAlignment:
             isLocal ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          // For assistant messages: avatar first, then message
+          // For assistant messages: avatar first, then message - UPDATED ICONS AND COLORS
           if (!isLocal) ...[
             Container(
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF153f1e),
+                color: const Color(0xFF153F1E)
+                    .withOpacity(0.1), // Light green background
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(
-                Icons.assistant_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
+              child: isTyping
+                  ? _buildLoadingIcon()
+                  : const Icon(
+                      Icons.smart_toy_outlined, // Updated to match first file
+                      color: Color(0xFF153F1E), // Dark green icon
+                      size: 18,
+                    ),
             ),
             const SizedBox(width: 12),
           ],
@@ -1435,7 +1569,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: isLocal
-                      ? const Color(0xFF153f1e).withOpacity(0.1)
+                      ? const Color(0xFF153f1e)
                       : const Color(0xFF153f1e).withOpacity(0.05),
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(12),
@@ -1445,7 +1579,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                   ),
                   border: Border.all(
                     color: isLocal
-                        ? const Color(0xFF153f1e).withOpacity(0.2)
+                        ? const Color(0xFF1e5e29)
                         : const Color(0xFFE2E8F0),
                   ),
                 ),
@@ -1458,88 +1592,94 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                     // Attachments preview (if any)
                     if (attachedFiles != null && attachedFiles.isNotEmpty) ...[
                       ...attachedFiles.map((file) => Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isLocal
-                              ? const Color(0xFF153f1e).withOpacity(0.05)
-                              : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _getFileIcon(file.name),
-                              size: 16,
-                              color: const Color(0xFF64748b),
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                file.name,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF64748b),
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isLocal
+                                  ? const Color(0xFF153f1e).withOpacity(0.05)
+                                  : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
                               ),
                             ),
-                          ],
-                        ),
-                      )),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _getFileIcon(file.name),
+                                  size: 16,
+                                  color: const Color(0xFF64748b),
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    file.name,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748b),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
                     ],
-                    
+
                     // Message content with copy button
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Flexible(
-                          child: SelectableText(
-                            text,
-                            textAlign:
-                                isLocal ? TextAlign.right : TextAlign.left,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isLocal
-                                  ? const Color(0xFF153f1e)
-                                  : const Color(0xFF374151),
-                              height: 1.4,
-                              fontWeight:
-                                  isLocal ? FontWeight.w500 : FontWeight.w400,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Copy button with hover effect
-                        MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: GestureDetector(
-                            onTap: () {
-                              Clipboard.setData(ClipboardData(text: text));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Copied to clipboard'),
-                                  duration: Duration(seconds: 1),
+                          child: isTyping
+                              ? _buildTypingIndicator()
+                              : SelectableText(
+                                  text,
+                                  textAlign: isLocal
+                                      ? TextAlign.right
+                                      : TextAlign.left,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: isLocal
+                                        ? Colors.white
+                                        : const Color(0xFF374151),
+                                    height: 1.4,
+                                    fontWeight: isLocal
+                                        ? FontWeight.w500
+                                        : FontWeight.w400,
+                                  ),
                                 ),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              child: Icon(
-                                Icons.copy,
-                                size: 14,
-                                color: isLocal
-                                    ? const Color(0xFF153f1e).withOpacity(0.7)
-                                    : const Color(0xFF64748b),
+                        ),
+                        if (!isTyping) ...[
+                          const SizedBox(width: 8),
+                          // Copy button with hover effect
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: text));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Copied to clipboard'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.copy,
+                                  size: 14,
+                                  color: isLocal
+                                      ? Colors.white.withOpacity(0.8)
+                                      : const Color(0xFF64748b),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],
@@ -1548,19 +1688,20 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
             ),
           ),
 
-          // For user messages: message first, then avatar
+          // For user messages: message first, then avatar - UPDATED ICONS AND COLORS
           if (isLocal) ...[
             const SizedBox(width: 12),
             Container(
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF153f1e),
+                color: const Color(0xFF153F1E)
+                    .withOpacity(0.1), // Light green background
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(
-                Icons.person,
-                color: Colors.white,
+                Icons.person_outline, // Updated to match first file
+                color: Color(0xFF153F1E), // Dark green icon
                 size: 18,
               ),
             ),
@@ -1668,12 +1809,12 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     }
   }
 
+  // EXACT REPLICA: Attachment Preview - Matching Image Style Exactly
   Widget _buildAttachmentPreview() {
     if (attachedFiles.isEmpty) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      constraints: const BoxConstraints(maxHeight: 280),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
@@ -1683,31 +1824,36 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Header with paperclip icon and hamburger menu - EXACT MATCH
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
+              border: Border(
+                  bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.attach_file, size: 14, color: Color(0xFF64748b)),
-                const SizedBox(width: 6),
+                const Icon(Icons.attach_file,
+                    size: 16, color: Color(0xFF64748b)),
+                const SizedBox(width: 8),
                 Text(
                   '${attachedFiles.length} file(s) attached',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF64748b),
                   ),
                 ),
                 const Spacer(),
-                GestureDetector(
-                  onTap: _clearAllAttachments,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      // Show options menu
+                    },
                     child: const Icon(
-                      Icons.clear_all,
-                      size: 14,
+                      Icons.menu,
+                      size: 16,
                       color: Color(0xFF64748b),
                     ),
                   ),
@@ -1715,169 +1861,305 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
               ],
             ),
           ),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.all(8),
-              itemCount: attachedFiles.length,
-              itemBuilder: (context, index) =>
-                  _buildAttachedFileItem(attachedFiles[index]),
-            ),
+
+          // File items
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            itemCount: attachedFiles.length,
+            itemBuilder: (context, index) =>
+                _buildAttachedFileItem(attachedFiles[index]),
           ),
         ],
       ),
     );
   }
 
+  // EXACT REPLICA: File Item - Matching Image Style Exactly
   Widget _buildAttachedFileItem(AttachedFile file) {
     final controller = filePromptControllers[file.id]!;
-    
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
+      padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // File header
-          Container(
-            padding: const EdgeInsets.all(12),
-            child: Row(
+          // File header row - EXACT MATCH to image
+          Row(
+            children: [
+              // File icon - exact blue color from image
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B82F6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Icon(
+                  Icons.image,
+                  color: Colors.white,
+                  size: 12,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // File info column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      file.name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1F2937),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Text(
+                          file.size,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Green "Instructions" label - EXACT MATCH
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF059669),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Instructions',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Action buttons - EXACT MATCH to image
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Eye icon (preview)
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        // Preview file
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        child: const Icon(
+                          Icons.visibility_outlined,
+                          size: 16,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Expand/collapse icon
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () => _togglePromptEdit(file),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          file.isExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          size: 16,
+                          color: const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Close icon
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () => _removeAttachedFile(file),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        child: const Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // Show instructions below file when not expanded but has prompt - NEW ADDITION
+          if (!file.isExpanded &&
+              file.prompt != null &&
+              file.prompt!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.edit_note,
+                    size: 16,
+                    color: Color(0xFF6B7280),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      file.prompt!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF374151),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Expandable instructions section - EXACT MATCH to image
+          if (file.isExpanded) ...[
+            const SizedBox(height: 16),
+
+            // "Instructions for this file:" label with icon - EXACT MATCH
+            const Row(
               children: [
                 Icon(
-                  _getFileIcon(file.name),
-                  size: 18,
-                  color: const Color(0xFF153f1e),
+                  Icons.edit_note,
+                  size: 16,
+                  color: Color(0xFF6B7280),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        file.name,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1e293b),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        file.size,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF64748b),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => _togglePromptEdit(file),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      file.isExpanded ? Icons.expand_less : Icons.expand_more,
-                      size: 16,
-                      color: const Color(0xFF64748b),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onTap: () => _removeAttachedFile(file),
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    child: const Icon(
-                      Icons.close,
-                      size: 14,
-                      color: Color(0xFFEF4444),
-                    ),
+                SizedBox(width: 6),
+                Text(
+                  'Instructions for this file:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF6B7280),
                   ),
                 ),
               ],
             ),
-          ),
-          
-          // Expandable prompt section
-          if (file.isExpanded) ...[
+
+            const SizedBox(height: 12),
+
+            // Text input - EXACT MATCH to image styling
             Container(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Instructions for this file:',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF64748b),
-                    ),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: TextField(
+                controller: controller,
+                maxLines: 3,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF1F2937),
+                ),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.all(12),
+                  hintText: 'Add specific instructions for this file...',
+                  hintStyle: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF9CA3AF),
                   ),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: controller,
-                    maxLines: 2,
-                    style: const TextStyle(fontSize: 12),
-                    decoration: InputDecoration(
-                      hintText: 'Add specific instructions for this file...',
-                      hintStyle: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF9CA3AF),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: const BorderSide(color: Color(0xFF153f1e)),
-                      ),
-                      contentPadding: const EdgeInsets.all(8),
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => _cancelPromptEdit(file),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          minimumSize: Size.zero,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Cancel and Done buttons - EXACT MATCH to image
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Cancel button - exact styling from image
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => _cancelPromptEdit(file),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Color(0xFF6B7280),
                         ),
-                        child: const Text(
+                        SizedBox(width: 6),
+                        Text(
                           'Cancel',
                           style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF64748b),
+                            fontSize: 14,
+                            color: Color(0xFF6B7280),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () => _savePromptEdit(file),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF153f1e),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          minimumSize: Size.zero,
-                          textStyle: const TextStyle(fontSize: 11),
-                        ),
-                        child: const Text('Save'),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ],
-              ),
+                ),
+
+                // Done button - exact styling from image
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => _savePromptEdit(file),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check,
+                          size: 16,
+                          color: Color(0xFF059669),
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Done',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFF059669),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ],
@@ -1935,59 +2217,6 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     });
   }
 
-  void _clearAllAttachments() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text(
-          'Clear All Attachments',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1e293b),
-          ),
-        ),
-        content: const Text(
-          'Are you sure you want to remove all attached files?',
-          style: TextStyle(
-            fontSize: 14,
-            color: Color(0xFF64748b),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF64748b),
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _clearAttachments();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Clear All',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _removeAttachedFile(AttachedFile file) {
     _safeSetState(() {
       attachedFiles.removeWhere((f) => f.id == file.id);
@@ -2022,7 +2251,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     }
 
     final filesToSend = List<AttachedFile>.from(attachedFiles);
-    
+
     _clearAttachments();
     context.read<app_ctrl.AppCtrl>().messageCtrl.clear();
 
@@ -2076,7 +2305,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
   }
 }
 
-// Floating loading dots widget
+// ORIGINAL Floating loading dots widget - FOR LOADING SCREEN ONLY
 class _FloatingLoadingDots extends StatefulWidget {
   @override
   State<_FloatingLoadingDots> createState() => _FloatingLoadingDotsState();
