@@ -1,4 +1,6 @@
 import 'dart:ui';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +10,51 @@ import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:voice_assistant/widgets/settings_modal.dart';
 import 'package:voice_assistant/widgets/voicepad.dart';
 import '../controllers/app_ctrl.dart' as app_ctrl;
+
+// Advanced AttachedFile model
+class AttachedFile {
+  final String id;
+  final String name;
+  final FileType type;
+  final String size;
+  final Uint8List data;
+  final String? prompt;
+  final bool isExpanded;
+  final String? originalPrompt;
+
+  AttachedFile({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.size,
+    required this.data,
+    this.prompt,
+    this.isExpanded = false,
+    this.originalPrompt,
+  });
+
+  AttachedFile copyWith({
+    String? id,
+    String? name,
+    FileType? type,
+    String? size,
+    Uint8List? data,
+    String? prompt,
+    bool? isExpanded,
+    String? originalPrompt,
+  }) {
+    return AttachedFile(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      size: size ?? this.size,
+      data: data ?? this.data,
+      prompt: prompt ?? this.prompt,
+      isExpanded: isExpanded ?? this.isExpanded,
+      originalPrompt: originalPrompt ?? this.originalPrompt,
+    );
+  }
+}
 
 // Model for storing chat sessions
 class ChatSession {
@@ -28,11 +75,13 @@ class ChatMessage {
   final String text;
   final bool isLocal;
   final DateTime timestamp;
+  final List<AttachedFile>? attachedFiles;
 
   ChatMessage({
     required this.text,
     required this.isLocal,
     required this.timestamp,
+    this.attachedFiles,
   });
 }
 
@@ -51,7 +100,12 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
   List<ChatSession> _chatHistory = [];
   ChatSession? _currentChatSession;
   bool _shouldShowInitialLoading = true;
-  bool _hasAgentSpoken = false; // Add this
+  bool _hasAgentSpoken = false;
+  
+  // Advanced file attachment state
+  List<AttachedFile> attachedFiles = [];
+  Map<String, TextEditingController> filePromptControllers = {};
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -82,7 +136,19 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
         .roomContext
         .removeListener(_onTranscriptionChanged);
     _scrollController.dispose();
+    
+    // Dispose file prompt controllers
+    for (var controller in filePromptControllers.values) {
+      controller.dispose();
+    }
+    
     super.dispose();
+  }
+
+  void _safeSetState(VoidCallback fn) {
+    if (mounted) {
+      setState(fn);
+    }
   }
 
   // Add this method to detect agent speech
@@ -369,7 +435,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     setState(() {
       _currentView = AppView.chat;
       _shouldShowInitialLoading = true;
-      _hasAgentSpoken = false; // Reset this
+      _hasAgentSpoken = false;
       _currentChatSession = null;
     });
 
@@ -389,14 +455,11 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     // Disconnect from current session
     context.read<app_ctrl.AppCtrl>().disconnect();
 
-    // Save current chat if it has messages (you'll need to implement this based on your transcription data)
-    // _saveCurrentChatSession();
-
     setState(() {
       _currentView = AppView.welcome;
       _currentChatSession = null;
-      _hasAgentSpoken = false; // Reset this
-      _shouldShowInitialLoading = true; // Reset this
+      _hasAgentSpoken = false;
+      _shouldShowInitialLoading = true;
     });
   }
 
@@ -405,7 +468,6 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
       _currentView = AppView.chat;
       _currentChatSession = session;
     });
-    // Here you might want to restore the chat context or just show historical messages
   }
 
   @override
@@ -608,72 +670,75 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
           const HiddenVoicePad(),
 
           // Settings Button
-       Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 16),
-  child: StatefulBuilder(
-    builder: (context, setState) {
-      bool isHovering = false;
-      return MouseRegion(
-        onEnter: (_) => setState(() => isHovering = true),
-        onExit: (_) => setState(() => isHovering = false),
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: () {
-            showSettingsModal(context);
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isHovering 
-                  ? const Color(0xFF153f1e).withOpacity(0.08)
-                  : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isHovering 
-                    ? const Color(0xFF153f1e).withOpacity(0.3)
-                    : const Color(0xFFE2E8F0),
-                width: isHovering ? 1.5 : 1,
-              ),
-              boxShadow: isHovering 
-                  ? [
-                      BoxShadow(
-                        color: const Color(0xFF153f1e).withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      )
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.settings_outlined,
-                  color: isHovering 
-                      ? const Color(0xFF153f1e)
-                      : const Color(0xFF64748b),
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Settings',
-                  style: TextStyle(
-                    color: isHovering 
-                        ? const Color(0xFF153f1e)
-                        : const Color(0xFF64748b),
-                    fontSize: 14,
-                    fontWeight: isHovering ? FontWeight.w600 : FontWeight.w500,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                bool isHovering = false;
+                return MouseRegion(
+                  onEnter: (_) => setState(() => isHovering = true),
+                  onExit: (_) => setState(() => isHovering = false),
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      showSettingsModal(context);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isHovering
+                            ? const Color(0xFF153f1e).withOpacity(0.08)
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isHovering
+                              ? const Color(0xFF153f1e).withOpacity(0.3)
+                              : const Color(0xFFE2E8F0),
+                          width: isHovering ? 1.5 : 1,
+                        ),
+                        boxShadow: isHovering
+                            ? [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFF153f1e).withOpacity(0.1),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.settings_outlined,
+                            color: isHovering
+                                ? const Color(0xFF153f1e)
+                                : const Color(0xFF64748b),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Settings',
+                            style: TextStyle(
+                              color: isHovering
+                                  ? const Color(0xFF153f1e)
+                                  : const Color(0xFF64748b),
+                              fontSize: 14,
+                              fontWeight: isHovering
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                );
+              },
             ),
           ),
-        ),
-      );
-    },
-  ),
-),
 
           const SizedBox(height: 16),
         ],
@@ -683,102 +748,305 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
 
   Widget _buildWelcomeScreen() {
     return Container(
-      color: Colors.white,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Logo/Icon
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: const Color(0xFF153f1e).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.gavel_rounded,
-                color: Color(0xFF153f1e),
-                size: 40,
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Welcome Title
-            const Text(
-              'Welcome to HAAKEEM',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1e293b),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // Subtitle
-            const Text(
-              'Your AI-powered legal assistant',
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFF64748b),
-              ),
-            ),
-
-            const SizedBox(height: 48),
-
-            // Start Voice Mode Button
-            ElevatedButton.icon(
-              onPressed: _startNewChat,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF153f1e),
-                foregroundColor: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: const Icon(Icons.mic_rounded, size: 20),
-              label: const Text(
-                'Start Voice Mode',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 48),
-
-            // Features
-            Container(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: const Column(
-                children: [
-                  _FeatureItem(
-                    icon: Icons.security,
-                    title: 'Secure & Confidential',
-                    description: 'Your conversations are encrypted and private',
-                  ),
-                  SizedBox(height: 16),
-                  _FeatureItem(
-                    icon: Icons.speed,
-                    title: 'Instant Legal Guidance',
-                    description:
-                        'Get immediate answers to your legal questions',
-                  ),
-                  SizedBox(height: 16),
-                  _FeatureItem(
-                    icon: Icons.verified_user,
-                    title: 'Expert Knowledge',
-                    description: 'Powered by comprehensive legal databases',
-                  ),
-                ],
-              ),
-            ),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFF8FAFC),
+            Color(0xFFF1F5F9),
           ],
+        ),
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // AI Icon with Modern Styling
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF153f1e).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(40),
+                  border: Border.all(
+                    color: const Color(0xFF153f1e).withOpacity(0.1),
+                    width: 2,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.psychology_outlined,
+                  color: Color(0xFF153f1e),
+                  size: 40,
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Title
+              const Text(
+                'AI Legal Assistant Ready',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 12),
+
+              // Subtitle
+              Container(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: const Text(
+                  '✨ Your intelligent legal companion awaits',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Color(0xFF64748b),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 48),
+
+              // Mode Selection Container
+              Container(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  children: [
+                    // Voice Mode Button - Primary
+                    Container(
+                      width: double.infinity,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF153f1e),
+                            Color(0xFF1e5e29),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF153f1e).withOpacity(0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _startNewChat,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(
+                                    Icons.mic_rounded,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                const Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Start Voice Mode',
+                                        style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Speak naturally with your AI assistant',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w400,
+                                          color: Color(0xFFB8E6C1),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  color: Colors.white.withOpacity(0.7),
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Chat Mode Button - Secondary
+                    Container(
+                      width: double.infinity,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFFE5E7EB),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _currentView = AppView.chat;
+                              _currentChatSession = null;
+                            });
+                            // Navigate to chat without connecting voice
+                            context.read<app_ctrl.AppCtrl>().navigateToAgent();
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF153f1e)
+                                        .withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(
+                                    Icons.chat_bubble_outline_rounded,
+                                    color: Color(0xFF153f1e),
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                const Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Start Chat Mode',
+                                        style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1F2937),
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Type your questions and get instant answers',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w400,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  color: const Color(0xFF9CA3AF),
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 48),
+
+              // Features Section - Modern Card Layout
+              Container(
+                constraints: const BoxConstraints(maxWidth: 500),
+                child: const Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ModernFeatureCard(
+                            icon: Icons.security,
+                            title: 'Secure & Confidential',
+                            description: 'End-to-end encrypted conversations',
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: _ModernFeatureCard(
+                            icon: Icons.speed,
+                            title: 'Instant Guidance',
+                            description: 'Get immediate legal insights',
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ModernFeatureCard(
+                            icon: Icons.verified_user,
+                            title: 'Expert Knowledge',
+                            description: 'Powered by legal databases',
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: _ModernFeatureCard(
+                            icon: Icons.language,
+                            title: 'Multi-Modal',
+                            description: 'Voice and text interactions',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -921,7 +1189,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
               ),
             ),
 
-            // Input Area
+            // Input Area with Advanced Attachments
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
@@ -935,7 +1203,10 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
               ),
               child: Column(
                 children: [
-                  // Text Input with Dark Green Send Button
+                  // Attachment Preview
+                  _buildAttachmentPreview(),
+                  
+                  // Text Input with Attach, Mic, and Send buttons
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -948,52 +1219,92 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                     ),
                     child: Row(
                       children: [
+                        // Attach File Button
+                        Container(
+                          margin: const EdgeInsets.all(4),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _isUploading ? null : _scanDocuments,
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: _isUploading
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(
+                                            Color(0xFF64748b),
+                                          ),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.attach_file_rounded,
+                                        color: Color(0xFF64748b),
+                                        size: 20,
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        
                         // Text Input
                         Expanded(
                           child: Container(
-  constraints: const BoxConstraints(minHeight: 40),
-  child: Consumer<app_ctrl.AppCtrl>(
-    builder: (context, appCtrl, child) => RawKeyboardListener(
-      focusNode: FocusNode(),
-      onKey: (RawKeyEvent event) {
-        if (event is RawKeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
-          if (event.isShiftPressed) {
-            // Shift+Enter: Add new line - let the default behavior happen
-            return;
-          } else {
-            // Enter alone: Send message and prevent default behavior
-            if (appCtrl.isSendButtonEnabled && appCtrl.messageCtrl.text.trim().isNotEmpty) {
-              appCtrl.sendMessage();
-            }
-            // Don't add the event to prevent new line
-            return;
-          }
-        }
-      },
-      child: TextField(
-        controller: appCtrl.messageCtrl,
-        focusNode: appCtrl.messageFocusNode,
-        decoration: const InputDecoration(
-          hintText: 'Hello. How are you?',
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        ),
-        maxLines: null, // Allow multiple lines
-        keyboardType: TextInputType.multiline,
-        textInputAction: TextInputAction.newline, // Allow new lines with Shift+Enter
-        onTapOutside: (event) {
-          appCtrl.messageFocusNode.unfocus();
-        },
-      ),
-    ),
-  ),
-),
+                            constraints: const BoxConstraints(minHeight: 40),
+                            child: Consumer<app_ctrl.AppCtrl>(
+                              builder: (context, appCtrl, child) =>
+                                  RawKeyboardListener(
+                                focusNode: FocusNode(),
+                                onKey: (RawKeyEvent event) {
+                                  if (event is RawKeyDownEvent &&
+                                      event.logicalKey ==
+                                          LogicalKeyboardKey.enter) {
+                                    if (event.isShiftPressed) {
+                                      return;
+                                    } else {
+                                      if (appCtrl.isSendButtonEnabled &&
+                                          appCtrl.messageCtrl.text
+                                              .trim()
+                                              .isNotEmpty) {
+                                        _sendMessage(appCtrl.messageCtrl.text);
+                                      }
+                                      return;
+                                    }
+                                  }
+                                },
+                                child: TextField(
+                                  controller: appCtrl.messageCtrl,
+                                  focusNode: appCtrl.messageFocusNode,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Hello. How are you?',
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                  ),
+                                  maxLines: null,
+                                  keyboardType: TextInputType.multiline,
+                                  textInputAction: TextInputAction.newline,
+                                  onTapOutside: (event) {
+                                    appCtrl.messageFocusNode.unfocus();
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
+
+                        // Voice Input Button
                         Container(
                           margin: const EdgeInsets.all(4),
                           child: IconButton(
                             onPressed: () {
-                              // Handle voice input toggle
                               context
                                   .read<app_ctrl.AppCtrl>()
                                   .toggleAgentScreenMode();
@@ -1004,18 +1315,20 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                             ),
                           ),
                         ),
+
+                        // Send Button
                         Consumer<app_ctrl.AppCtrl>(
                           builder: (context, appCtrl, child) => Container(
                             margin: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: appCtrl.isSendButtonEnabled
+                              color: (appCtrl.isSendButtonEnabled || attachedFiles.isNotEmpty)
                                   ? const Color(0xFF153f1e)
                                   : const Color(0xFF94A3B8),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: IconButton(
-                              onPressed: appCtrl.isSendButtonEnabled
-                                  ? () => appCtrl.sendMessage()
+                              onPressed: (appCtrl.isSendButtonEnabled || attachedFiles.isNotEmpty)
+                                  ? () => _sendMessage(appCtrl.messageCtrl.text)
                                   : null,
                               icon: const Icon(
                                 Icons.send_rounded,
@@ -1034,10 +1347,9 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
           ],
         ),
 
-        // UPDATED: Loading overlay - hide when agent speaks
+        // Loading overlay
         Consumer<app_ctrl.AppCtrl>(
           builder: (context, appCtrl, child) {
-            // Show loading only if agent hasn't spoken yet
             bool showLoading = _shouldShowInitialLoading &&
                 !_hasAgentSpoken &&
                 (appCtrl.connectionState ==
@@ -1062,7 +1374,8 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
       itemCount: _currentChatSession!.messages.length,
       itemBuilder: (context, index) {
         final message = _currentChatSession!.messages[index];
-        return _buildMessageBubble(message.text, message.isLocal);
+        return _buildMessageBubble(message.text, message.isLocal, 
+            attachedFiles: message.attachedFiles);
       },
     );
   }
@@ -1085,7 +1398,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isLocal) {
+  Widget _buildMessageBubble(String text, bool isLocal, {List<AttachedFile>? attachedFiles}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -1142,6 +1455,44 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                       : CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Attachments preview (if any)
+                    if (attachedFiles != null && attachedFiles.isNotEmpty) ...[
+                      ...attachedFiles.map((file) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isLocal
+                              ? const Color(0xFF153f1e).withOpacity(0.05)
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _getFileIcon(file.name),
+                              size: 16,
+                              color: const Color(0xFF64748b),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                file.name,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF64748b),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    ],
+                    
                     // Message content with copy button
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1268,9 +1619,464 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
       ),
     );
   }
+
+  // Advanced File Attachment Methods
+  Future<void> _scanDocuments() async {
+    try {
+      _safeSetState(() => _isUploading = true);
+
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'jpg', 'png', 'jpeg'],
+        withData: true,
+      );
+
+      if (result != null) {
+        for (var file in result.files) {
+          if (file.bytes != null) {
+            String extension = file.extension?.toLowerCase() ?? '';
+            String fileId = DateTime.now().millisecondsSinceEpoch.toString() +
+                '_${file.name}';
+
+            AttachedFile attachedFile = AttachedFile(
+              id: fileId,
+              name: file.name,
+              type: _getFileTypeFromExtension(extension),
+              size: _formatFileSize(file.size),
+              data: file.bytes!,
+            );
+
+            _safeSetState(() {
+              attachedFiles.add(attachedFile);
+              filePromptControllers[fileId] = TextEditingController();
+            });
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading documents: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } finally {
+      _safeSetState(() => _isUploading = false);
+    }
+  }
+
+  Widget _buildAttachmentPreview() {
+    if (attachedFiles.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      constraints: const BoxConstraints(maxHeight: 280),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 0.5)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.attach_file, size: 14, color: Color(0xFF64748b)),
+                const SizedBox(width: 6),
+                Text(
+                  '${attachedFiles.length} file(s) attached',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF64748b),
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _clearAllAttachments,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    child: const Icon(
+                      Icons.clear_all,
+                      size: 14,
+                      color: Color(0xFF64748b),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(8),
+              itemCount: attachedFiles.length,
+              itemBuilder: (context, index) =>
+                  _buildAttachedFileItem(attachedFiles[index]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttachedFileItem(AttachedFile file) {
+    final controller = filePromptControllers[file.id]!;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          // File header
+          Container(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(
+                  _getFileIcon(file.name),
+                  size: 18,
+                  color: const Color(0xFF153f1e),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        file.name,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1e293b),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        file.size,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFF64748b),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => _togglePromptEdit(file),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      file.isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: const Color(0xFF64748b),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => _removeAttachedFile(file),
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(
+                      Icons.close,
+                      size: 14,
+                      color: Color(0xFFEF4444),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Expandable prompt section
+          if (file.isExpanded) ...[
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Instructions for this file:',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748b),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: controller,
+                    maxLines: 2,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Add specific instructions for this file...',
+                      hintStyle: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFF153f1e)),
+                      ),
+                      contentPadding: const EdgeInsets.all(8),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => _cancelPromptEdit(file),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          minimumSize: Size.zero,
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF64748b),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => _savePromptEdit(file),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF153f1e),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          minimumSize: Size.zero,
+                          textStyle: const TextStyle(fontSize: 11),
+                        ),
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _togglePromptEdit(AttachedFile file) {
+    _safeSetState(() {
+      int index = attachedFiles.indexWhere((f) => f.id == file.id);
+      if (index != -1) {
+        if (!file.isExpanded) {
+          // Start editing
+          filePromptControllers[file.id]!.text = file.prompt ?? '';
+          attachedFiles[index] = file.copyWith(
+            isExpanded: true,
+            originalPrompt: file.prompt,
+          );
+        } else {
+          // Cancel editing
+          attachedFiles[index] = file.copyWith(
+            isExpanded: false,
+            originalPrompt: null,
+          );
+        }
+      }
+    });
+  }
+
+  void _savePromptEdit(AttachedFile file) {
+    _safeSetState(() {
+      int index = attachedFiles.indexWhere((f) => f.id == file.id);
+      if (index != -1) {
+        String newPrompt = filePromptControllers[file.id]!.text.trim();
+        attachedFiles[index] = file.copyWith(
+          prompt: newPrompt.isEmpty ? null : newPrompt,
+          isExpanded: false,
+          originalPrompt: null,
+        );
+      }
+    });
+  }
+
+  void _cancelPromptEdit(AttachedFile file) {
+    _safeSetState(() {
+      int index = attachedFiles.indexWhere((f) => f.id == file.id);
+      if (index != -1) {
+        filePromptControllers[file.id]!.text = file.originalPrompt ?? '';
+        attachedFiles[index] = file.copyWith(
+          prompt: file.originalPrompt,
+          isExpanded: false,
+          originalPrompt: null,
+        );
+      }
+    });
+  }
+
+  void _clearAllAttachments() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text(
+          'Clear All Attachments',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1e293b),
+          ),
+        ),
+        content: const Text(
+          'Are you sure you want to remove all attached files?',
+          style: TextStyle(
+            fontSize: 14,
+            color: Color(0xFF64748b),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF64748b),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _clearAttachments();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Clear All',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _removeAttachedFile(AttachedFile file) {
+    _safeSetState(() {
+      attachedFiles.removeWhere((f) => f.id == file.id);
+      filePromptControllers[file.id]?.dispose();
+      filePromptControllers.remove(file.id);
+    });
+  }
+
+  void _clearAttachments() {
+    for (var controller in filePromptControllers.values) {
+      controller.dispose();
+    }
+    _safeSetState(() {
+      attachedFiles.clear();
+      filePromptControllers.clear();
+    });
+  }
+
+  Future<void> _sendMessage(String userMessage) async {
+    if (userMessage.trim().isEmpty && attachedFiles.isEmpty) return;
+
+    String fullMessage = userMessage;
+
+    if (attachedFiles.isNotEmpty) {
+      fullMessage += '\n\n[Attachments]:';
+      for (var file in attachedFiles) {
+        fullMessage += '\n📄 ${file.name}';
+        if (file.prompt != null && file.prompt!.isNotEmpty) {
+          fullMessage += ' - Instructions: ${file.prompt}';
+        }
+      }
+    }
+
+    final filesToSend = List<AttachedFile>.from(attachedFiles);
+    
+    _clearAttachments();
+    context.read<app_ctrl.AppCtrl>().messageCtrl.clear();
+
+    // Add message to transcription/history
+    final appCtrl = context.read<app_ctrl.AppCtrl>();
+    appCtrl.messageCtrl.text = fullMessage;
+    appCtrl.sendMessage();
+  }
+
+  // Utility methods
+  FileType _getFileTypeFromExtension(String extension) {
+    switch (extension) {
+      case 'pdf':
+      case 'doc':
+      case 'docx':
+        return FileType.custom;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return FileType.image;
+      case 'txt':
+        return FileType.custom;
+      default:
+        return FileType.custom;
+    }
+  }
+
+  IconData _getFileIcon(String fileName) {
+    String extension = fileName.toLowerCase().split('.').last;
+    switch (extension) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'txt':
+        return Icons.text_snippet;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      default:
+        return Icons.attach_file;
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  }
 }
 
-// NEW: Floating loading dots widget
+// Floating loading dots widget
 class _FloatingLoadingDots extends StatefulWidget {
   @override
   State<_FloatingLoadingDots> createState() => _FloatingLoadingDotsState();
@@ -1425,6 +2231,77 @@ class _FeatureItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ModernFeatureCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+
+  const _ModernFeatureCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFE5E7EB),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFF153f1e).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: const Color(0xFF153f1e),
+              size: 24,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF0F172A),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF64748B),
+              fontWeight: FontWeight.w400,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
