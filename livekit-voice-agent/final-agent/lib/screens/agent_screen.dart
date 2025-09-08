@@ -397,6 +397,7 @@ class _LegalChatInterfaceState extends State<LegalChatInterface> {
                               const Color.fromARGB(110, 118, 132, 120),
                             ],
                           ),
+                        
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
